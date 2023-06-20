@@ -1,8 +1,10 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit, QPushButton, QScrollArea
-from PyQt5.QtGui import QPixmap, QPainter, QPalette, QColor, QBrush
+from PyQt5.QtGui import QPixmap, QPalette, QBrush
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from translate import Translator
+import pyttsx3
+
 
 class TranslationThread(QThread):
     translation_completed = pyqtSignal(str)
@@ -18,6 +20,18 @@ class TranslationThread(QThread):
         translation = translator.translate(self.text)
         self.translation_completed.emit(translation)
 
+
+class TextToSpeechThread(QThread):
+    def __init__(self, text):
+        super().__init__()
+        self.text = text
+        self.engine = pyttsx3.init()
+
+    def run(self):
+        self.engine.say(self.text)
+        self.engine.runAndWait()
+
+
 class TranslationApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -29,7 +43,7 @@ class TranslationApp(QWidget):
         self.input_label = QLabel('请输入要翻译的文本：')
         self.input_text = QTextEdit()
         self.translate_btn = QPushButton('翻译')
-        self.toggle_btn = QPushButton('切换语言')
+        self.toggle_btn = QPushButton('切换中英')
         self.scroll_area = QScrollArea()  # 创建滚动区域
         self.scroll_area.setWidgetResizable(True)  # 设置滚动区域大小可调整
 
@@ -79,6 +93,9 @@ class TranslationApp(QWidget):
         palette.setBrush(self.backgroundRole(), QBrush(background_image))
         self.setPalette(palette)
 
+        self.translation_thread = None
+        self.text_to_speech_thread = None
+
     def start_translation(self):
         text = self.input_text.toPlainText()
         self.translation_thread = TranslationThread(text, self.src_lang, self.dest_lang)
@@ -92,9 +109,17 @@ class TranslationApp(QWidget):
         self.scroll_area.setWidget(result_label)  # 将结果标签放入滚动区域中
         self.translate_btn.setEnabled(True)  # 启用翻译按钮
 
+        self.text_to_speech_thread = TextToSpeechThread(translation)
+        self.text_to_speech_thread.start()
+
     def toggle_language(self):
         self.src_lang, self.dest_lang = self.dest_lang, self.src_lang
-        self.toggle_btn.setText('切换语言 ({})'.format(self.dest_lang))
+        self.toggle_btn.setText('切换中英')
+
+    def closeEvent(self, event):
+        if self.text_to_speech_thread is not None and self.text_to_speech_thread.isRunning():
+            self.text_to_speech_thread.terminate()
+            self.text_to_speech_thread.wait()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
